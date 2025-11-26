@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  avro-demo:
+    image: python:3.11-slim
+    container_name: avro-demo
+    working_dir: /app
+    volumes:
+      - ./data:/app
+    command: >
+      bash -c "
+        pip install fastavro confluent-kafka==2.5.0 &&
+        echo '════════════════════════════════' &&
+        echo '    DÉMO APACHE AVRO EN LIVE    ' &&
+        echo '════════════════════════════════' &&
+        sleep infinity
+      "
+    tty: true
