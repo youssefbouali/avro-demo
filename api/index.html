@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avro vs JSON API Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .control-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-panel button {
+            padding: 12px 25px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .control-group select {
+            padding: 8px 12px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .card:nth-child(2)::before {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin: 0;
+            flex: 1;
+        }
+
+        .format-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .badge-json {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-avro {
+            background: #fce4ec;
+            color: #c2185b;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .card:nth-child(2) .metric {
+            border-left-color: #f5576c;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #333;
+            font-family: 'Courier New', monospace;
+        }
+
+        .metric-unit {
+            font-size: 0.7em;
+            color: #999;
+            margin-left: 5px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .card:nth-child(2) .progress-fill {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .comparison {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .comparison h2 {
+            margin-bottom: 25px;
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .comparison-table td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .comparison-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .winner {
+            color: #4caf50;
+            font-weight: 700;
+        }
+
+        .data-viewer {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .data-viewer h2 {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .data-sample {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+            border-left: 4px solid #667eea;
+        }
+
+        .data-sample.avro {
+            border-left-color: #f5576c;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .alert-info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .control-panel {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .control-group {
+                flex-direction: column;
+            }
+
+            .control-panel button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Avro vs JSON API Comparison</h1>
+            <p class="subtitle">Real-time Performance Analysis: Data Serialization & Streaming</p>
+        </header>
+
+        <div class="control-panel">
+            <div class="control-group">
+                <label for="test-type">Test Type:</label>
+                <select id="test-type">
+                    <option value="stream">Streaming</option>
+                    <option value="batch">Batch</option>
+                </select>
+            </div>
+            <button class="btn-primary" id="start-test">Start Test</button>
+            <button class="btn-secondary" id="reset-test">Reset</button>
+            <div style="flex: 1;"></div>
+            <span id="status" style="color: #666;"></span>
+        </div>
+
+        <div class="dashboard">
+            <!-- JSON Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">JSON API</h3>
+                    <span class="format-badge badge-json">JSON</span>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-label">Processing Time</div>
+                        <div class="metric-value">
+                            <span id="json-time">0</span><span class="metric-unit">ms</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Total Size</div>
+                        <div class="metric-value">
+                            <span id="json-size">0</span><span class="metric-unit">KB</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Records Processed</div>
+                        <div class="metric-value" id="json-records">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Throughput</div>
+                        <div class="metric-value">
+                            <span id="json-throughput">0</span><span class="metric-unit">rec/s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Per Record</div>
+                        <div class="stat-value"><span id="json-avg">0</span>ms</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Data Efficiency</div>
+                        <div class="stat-value"><span id="json-efficiency">0</span>%</div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span>Progress</span>
+                        <span id="json-progress-text">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="json-progress" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Avro Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Avro API</h3>
+                    <span class="format-badge badge-avro">AVRO</span>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-label">Processing Time</div>
+                        <div class="metric-value">
+                            <span id="avro-time">0</span><span class="metric-unit">ms</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Total Size</div>
+                        <div class="metric-value">
+                            <span id="avro-size">0</span><span class="metric-unit">KB</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Records Processed</div>
+                        <div class="metric-value" id="avro-records">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Throughput</div>
+                        <div class="metric-value">
+                            <span id="avro-throughput">0</span><span class="metric-unit">rec/s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Avg Per Record</div>
+                        <div class="stat-value"><span id="avro-avg">0</span>ms</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Data Efficiency</div>
+                        <div class="stat-value"><span id="avro-efficiency">0</span>%</div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span>Progress</span>
+                        <span id="avro-progress-text">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="avro-progress" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="comparison">
+            <h2>📈 Performance Comparison</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>JSON</th>
+                        <th>Avro</th>
+                        <th>Winner</th>
+                        <th>Improvement</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Processing Time (ms)</td>
+                        <td id="comp-json-time">-</td>
+                        <td id="comp-avro-time">-</td>
+                        <td id="comp-time-winner">-</td>
+                        <td id="comp-time-improvement">-</td>
+                    </tr>
+                    <tr>
+                        <td>Total Size (KB)</td>
+                        <td id="comp-json-size">-</td>
+                        <td id="comp-avro-size">-</td>
+                        <td id="comp-size-winner">-</td>
+                        <td id="comp-size-improvement">-</td>
+                    </tr>
+                    <tr>
+                        <td>Throughput (rec/s)</td>
+                        <td id="comp-json-throughput">-</td>
+                        <td id="comp-avro-throughput">-</td>
+                        <td id="comp-throughput-winner">-</td>
+                        <td id="comp-throughput-improvement">-</td>
+                    </tr>
+                    <tr>
+                        <td>Avg Per Record (ms)</td>
+                        <td id="comp-json-avg">-</td>
+                        <td id="comp-avro-avg">-</td>
+                        <td id="comp-avg-winner">-</td>
+                        <td id="comp-avg-improvement">-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Data Viewer -->
+        <div class="data-viewer">
+            <h2>📄 Sample Data</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h4 style="margin-bottom: 10px; color: #667eea;">JSON Sample</h4>
+                    <div class="data-sample" id="json-sample">Waiting for data...</div>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 10px; color: #f5576c;">Avro Sample (Base64)</h4>
+                    <div class="data-sample avro" id="avro-sample">Waiting for data...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class APIComparison {
+            constructor() {
+                this.apiUrl = 'http://localhost:5000';
+                this.jsonMetrics = {
+                    totalTime: 0,
+                    totalSize: 0,
+                    recordCount: 0,
+                    processingTime: [],
+                    startTime: null
+                };
+                this.avroMetrics = {
+                    totalTime: 0,
+                    totalSize: 0,
+                    recordCount: 0,
+                    processingTime: [],
+                    startTime: null
+                };
+                this.isRunning = false;
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                document.getElementById('start-test').addEventListener('click', () => this.startTest());
+                document.getElementById('reset-test').addEventListener('click', () => this.reset());
+                document.getElementById('test-type').addEventListener('change', () => {
+                    if (!this.isRunning) this.reset();
+                });
+            }
+
+            async startTest() {
+                const testType = document.getElementById('test-type').value;
+                if (testType === 'stream') {
+                    await this.runStreamTest();
+                } else {
+                    await this.runBatchTest();
+                }
+            }
+
+            async runStreamTest() {
+                this.reset();
+                this.isRunning = true;
+                this.updateStatus('Starting streaming test...');
+                document.getElementById('start-test').disabled = true;
+
+                // Run both streams in parallel
+                await Promise.all([
+                    this.consumeJSONStream(),
+                    this.consumeAvroStream()
+                ]);
+
+                this.isRunning = false;
+                document.getElementById('start-test').disabled = false;
+                this.updateStatus('Test completed!');
+            }
+
+            async runBatchTest() {
+                this.reset();
+                this.isRunning = true;
+                this.updateStatus('Starting batch test...');
+                document.getElementById('start-test').disabled = true;
+
+                await Promise.all([
+                    this.getJSONBatch(),
+                    this.getAvroBatch()
+                ]);
+
+                this.isRunning = false;
+                document.getElementById('start-test').disabled = false;
+                this.updateStatus('Test completed!');
+            }
+
+            async consumeJSONStream() {
+                try {
+                    const response = await fetch(`${this.apiUrl}/api/json/stream`);
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    this.jsonMetrics.startTime = performance.now();
+
+                    let totalTime = 0;
+                    let lastSampleData = null;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.trim().split('\n');
+
+                        for (const line of lines) {
+                            if (!line) continue;
+                            const data = JSON.parse(line);
+                            this.jsonMetrics.recordCount++;
+                            this.jsonMetrics.totalSize += data.size_bytes;
+                            this.jsonMetrics.processingTime.push(data.processing_time_ms);
+                            totalTime += data.processing_time_ms;
+                            lastSampleData = data;
+                            this.updateJSONUI(totalTime);
+
+                            if (lastSampleData) {
+                                document.getElementById('json-sample').textContent = 
+                                    JSON.stringify(lastSampleData.data, null, 2);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('JSON Stream Error:', error);
+                    this.updateStatus('Error in JSON stream: ' + error.message);
+                }
+            }
+
+            async consumeAvroStream() {
+                try {
+                    const response = await fetch(`${this.apiUrl}/api/avro/stream`);
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    this.avroMetrics.startTime = performance.now();
+
+                    let totalTime = 0;
+                    let lastSampleData = null;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.trim().split('\n');
+
+                        for (const line of lines) {
+                            if (!line) continue;
+                            const data = JSON.parse(line);
+                            this.avroMetrics.recordCount++;
+                            this.avroMetrics.totalSize += data.size_bytes;
+                            this.avroMetrics.processingTime.push(data.processing_time_ms);
+                            totalTime += data.processing_time_ms;
+                            lastSampleData = data;
+                            this.updateAvroUI(totalTime);
+
+                            if (lastSampleData) {
+                                document.getElementById('avro-sample').textContent = 
+                                    lastSampleData.data.substring(0, 100) + '...';
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Avro Stream Error:', error);
+                    this.updateStatus('Error in Avro stream: ' + error.message);
+                }
+            }
+
+            async getJSONBatch() {
+                try {
+                    const startTime = performance.now();
+                    const response = await fetch(`${this.apiUrl}/api/json/batch`);
+                    const data = await response.json();
+                    const endTime = performance.now();
+
+                    this.jsonMetrics.recordCount = data.count;
+                    this.jsonMetrics.totalSize = data.size_bytes;
+                    this.jsonMetrics.totalTime = endTime - startTime;
+                    this.jsonMetrics.processingTime = [data.processing_time_ms];
+
+                    document.getElementById('json-sample').textContent = 
+                        JSON.stringify(data.data[0], null, 2);
+                    this.updateJSONUI(this.jsonMetrics.totalTime);
+                } catch (error) {
+                    console.error('JSON Batch Error:', error);
+                    this.updateStatus('Error in JSON batch: ' + error.message);
+                }
+            }
+
+            async getAvroBatch() {
+                try {
+                    const startTime = performance.now();
+                    const response = await fetch(`${this.apiUrl}/api/avro/batch`);
+                    const data = await response.json();
+                    const endTime = performance.now();
+
+                    this.avroMetrics.recordCount = data.count;
+                    this.avroMetrics.totalSize = data.size_bytes;
+                    this.avroMetrics.totalTime = endTime - startTime;
+                    this.avroMetrics.processingTime = [data.processing_time_ms];
+
+                    document.getElementById('avro-sample').textContent = 
+                        data.data.substring(0, 100) + '...';
+                    this.updateAvroUI(this.avroMetrics.totalTime);
+                } catch (error) {
+                    console.error('Avro Batch Error:', error);
+                    this.updateStatus('Error in Avro batch: ' + error.message);
+                }
+            }
+
+            updateJSONUI(totalTime) {
+                const avgTime = this.jsonMetrics.processingTime.length > 0 
+                    ? this.jsonMetrics.processingTime.reduce((a, b) => a + b, 0) / this.jsonMetrics.processingTime.length
+                    : 0;
+                const throughput = this.jsonMetrics.recordCount > 0 
+                    ? (this.jsonMetrics.recordCount / totalTime) * 1000
+                    : 0;
+
+                document.getElementById('json-time').textContent = totalTime.toFixed(2);
+                document.getElementById('json-size').textContent = (this.jsonMetrics.totalSize / 1024).toFixed(2);
+                document.getElementById('json-records').textContent = this.jsonMetrics.recordCount;
+                document.getElementById('json-throughput').textContent = throughput.toFixed(2);
+                document.getElementById('json-avg').textContent = avgTime.toFixed(4);
+
+                const progress = Math.min((this.jsonMetrics.recordCount / 100) * 100, 100);
+                document.getElementById('json-progress').style.width = progress + '%';
+                document.getElementById('json-progress-text').textContent = Math.round(progress) + '%';
+
+                this.updateComparison();
+            }
+
+            updateAvroUI(totalTime) {
+                const avgTime = this.avroMetrics.processingTime.length > 0 
+                    ? this.avroMetrics.processingTime.reduce((a, b) => a + b, 0) / this.avroMetrics.processingTime.length
+                    : 0;
+                const throughput = this.avroMetrics.recordCount > 0 
+                    ? (this.avroMetrics.recordCount / totalTime) * 1000
+                    : 0;
+
+                document.getElementById('avro-time').textContent = totalTime.toFixed(2);
+                document.getElementById('avro-size').textContent = (this.avroMetrics.totalSize / 1024).toFixed(2);
+                document.getElementById('avro-records').textContent = this.avroMetrics.recordCount;
+                document.getElementById('avro-throughput').textContent = throughput.toFixed(2);
+                document.getElementById('avro-avg').textContent = avgTime.toFixed(4);
+
+                const progress = Math.min((this.avroMetrics.recordCount / 100) * 100, 100);
+                document.getElementById('avro-progress').style.width = progress + '%';
+                document.getElementById('avro-progress-text').textContent = Math.round(progress) + '%';
+
+                this.updateComparison();
+            }
+
+            updateComparison() {
+                const jsonTime = parseFloat(document.getElementById('json-time').textContent) || 0;
+                const avroTime = parseFloat(document.getElementById('avro-time').textContent) || 0;
+                const jsonSize = parseFloat(document.getElementById('json-size').textContent) || 0;
+                const avroSize = parseFloat(document.getElementById('avro-size').textContent) || 0;
+                const jsonThroughput = parseFloat(document.getElementById('json-throughput').textContent) || 0;
+                const avroThroughput = parseFloat(document.getElementById('avro-throughput').textContent) || 0;
+                const jsonAvg = parseFloat(document.getElementById('json-avg').textContent) || 0;
+                const avroAvg = parseFloat(document.getElementById('avro-avg').textContent) || 0;
+
+                // Update comparison table
+                document.getElementById('comp-json-time').textContent = jsonTime.toFixed(2);
+                document.getElementById('comp-avro-time').textContent = avroTime.toFixed(2);
+                document.getElementById('comp-json-size').textContent = jsonSize.toFixed(2);
+                document.getElementById('comp-avro-size').textContent = avroSize.toFixed(2);
+                document.getElementById('comp-json-throughput').textContent = jsonThroughput.toFixed(2);
+                document.getElementById('comp-avro-throughput').textContent = avroThroughput.toFixed(2);
+                document.getElementById('comp-json-avg').textContent = jsonAvg.toFixed(4);
+                document.getElementById('comp-avro-avg').textContent = avroAvg.toFixed(4);
+
+                // Determine winners
+                this.setWinner('comp-time-winner', jsonTime, avroTime, true);
+                this.setWinner('comp-size-winner', jsonSize, avroSize, true);
+                this.setWinner('comp-throughput-winner', avroThroughput, jsonThroughput, false);
+                this.setWinner('comp-avg-winner', jsonAvg, avroAvg, true);
+
+                // Calculate improvements
+                if (jsonTime > 0) {
+                    const timeImprovement = ((jsonTime - avroTime) / jsonTime * 100).toFixed(1);
+                    document.getElementById('comp-time-improvement').textContent = 
+                        timeImprovement > 0 ? `+${timeImprovement}%` : `${timeImprovement}%`;
+                }
+                if (jsonSize > 0) {
+                    const sizeImprovement = ((jsonSize - avroSize) / jsonSize * 100).toFixed(1);
+                    document.getElementById('comp-size-improvement').textContent = 
+                        sizeImprovement > 0 ? `${sizeImprovement}%` : `${sizeImprovement}%`;
+                }
+                if (jsonThroughput > 0) {
+                    const throughputImprovement = ((avroThroughput - jsonThroughput) / jsonThroughput * 100).toFixed(1);
+                    document.getElementById('comp-throughput-improvement').textContent = 
+                        throughputImprovement > 0 ? `+${throughputImprovement}%` : `${throughputImprovement}%`;
+                }
+                if (jsonAvg > 0) {
+                    const avgImprovement = ((jsonAvg - avroAvg) / jsonAvg * 100).toFixed(1);
+                    document.getElementById('comp-avg-improvement').textContent = 
+                        avgImprovement > 0 ? `+${avgImprovement}%` : `${avgImprovement}%`;
+                }
+            }
+
+            setWinner(elementId, value1, value2, lowerIsBetter) {
+                const element = document.getElementById(elementId);
+                if (value1 === 0 || value2 === 0) {
+                    element.textContent = '-';
+                    return;
+                }
+
+                if (lowerIsBetter) {
+                    if (value1 < value2) {
+                        element.textContent = 'JSON';
+                        element.className = 'winner';
+                    } else if (value2 < value1) {
+                        element.textContent = 'Avro';
+                        element.className = 'winner';
+                    } else {
+                        element.textContent = 'Tie';
+                        element.className = '';
+                    }
+                } else {
+                    if (value1 > value2) {
+                        element.textContent = 'Avro';
+                        element.className = 'winner';
+                    } else if (value2 > value1) {
+                        element.textContent = 'JSON';
+                        element.className = 'winner';
+                    } else {
+                        element.textContent = 'Tie';
+                        element.className = '';
+                    }
+                }
+            }
+
+            updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+
+            reset() {
+                this.jsonMetrics = {
+                    totalTime: 0,
+                    totalSize: 0,
+                    recordCount: 0,
+                    processingTime: [],
+                    startTime: null
+                };
+                this.avroMetrics = {
+                    totalTime: 0,
+                    totalSize: 0,
+                    recordCount: 0,
+                    processingTime: [],
+                    startTime: null
+                };
+
+                // Reset UI
+                ['json', 'avro'].forEach(type => {
+                    document.getElementById(`${type}-time`).textContent = '0';
+                    document.getElementById(`${type}-size`).textContent = '0';
+                    document.getElementById(`${type}-records`).textContent = '0';
+                    document.getElementById(`${type}-throughput`).textContent = '0';
+                    document.getElementById(`${type}-avg`).textContent = '0';
+                    document.getElementById(`${type}-efficiency`).textContent = '0';
+                    document.getElementById(`${type}-progress`).style.width = '0%';
+                    document.getElementById(`${type}-progress-text`).textContent = '0%';
+                });
+
+                ['time', 'size', 'throughput', 'avg'].forEach(metric => {
+                    document.getElementById(`comp-json-${metric}`).textContent = '-';
+                    document.getElementById(`comp-avro-${metric}`).textContent = '-';
+                    document.getElementById(`comp-${metric}-winner`).textContent = '-';
+                    document.getElementById(`comp-${metric}-improvement`).textContent = '-';
+                });
+
+                document.getElementById('json-sample').textContent = 'Waiting for data...';
+                document.getElementById('avro-sample').textContent = 'Waiting for data...';
+                this.updateStatus('Ready');
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            new APIComparison();
+        });
+    </script>
+</body>
+</html>
