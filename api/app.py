@@ -1,4 +1,4 @@
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, send_file
 from flask_cors import CORS
 import json
 import random
@@ -6,6 +6,7 @@ import time
 import io
 import fastavro
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -44,6 +45,22 @@ def generate_user():
         "score": round(random.uniform(0, 100), 2),
         "active": random.choice([True, False])
     }
+
+@app.route('/', methods=['GET'])
+def index():
+    """Serve the dashboard HTML"""
+    try:
+        return send_file('index.html', mimetype='text/html')
+    except:
+        return jsonify({"error": "index.html not found"}), 404
+
+@app.route('/index.html', methods=['GET'])
+def index_html():
+    """Serve the dashboard HTML via /index.html path"""
+    try:
+        return send_file('index.html', mimetype='text/html')
+    except:
+        return jsonify({"error": "index.html not found"}), 404
 
 @app.route('/api/health', methods=['GET'])
 def health():
