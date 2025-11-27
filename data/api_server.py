@@ -1,258 +1,237 @@
 from flask import Flask, request, jsonify
-from avro.io import DatumWriter, DatumReader, BinaryEncoder, BinaryDecoder
-from avro.schema import parse
-import avro.schema
+from confluent_kafka import avro
+from confluent_kafka.avro import AvroProducer, AvroConsumer
 import json
-import io
-import os
+import threading
+from collections import deque
 
 app = Flask(__name__)
 
-# Load schemas
-script_dir = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(script_dir, 'user_v1.avsc'), 'r') as f:
-    schema_v1 = parse(f.read())
+# Define Avro schemas
+USER_SCHEMA_STR = """
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.example",
+  "fields": [
+    { "name": "id", "type": "long" },
+    { "name": "nom", "type": "string" },
+    { "name": "age", "type": "int" }
+  ]
+}
+"""
 
-with open(os.path.join(script_dir, 'user_v2.avsc'), 'r') as f:
-    schema_v2 = parse(f.read())
+USER_SCHEMA = avro.loads(USER_SCHEMA_STR)
 
-# Store for in-memory data
-users_db = {}
+# Global producer and consumer configuration
+KAFKA_CONFIG = {
+    'bootstrap.servers': 'kafka:9092',
+    'schema.registry.url': 'http://schema-registry:8081'
+}
+
+# Message buffer for consuming
+message_buffer = deque(maxlen=100)
+consumer_running = False
+
+# Initialize producer
+try:
+    producer = AvroProducer(KAFKA_CONFIG, default_value_schema=USER_SCHEMA)
+    print("✓ Producer initialized successfully")
+except Exception as e:
+    print(f"✗ Producer initialization failed: {e}")
+    producer = None
+
+# Consumer thread function
+def consume_messages():
+    global consumer_running
+    try:
+        consumer = AvroConsumer(
+            {
+                'bootstrap.servers': 'kafka:9092',
+                'schema.registry.url': 'http://schema-registry:8081',
+                'group.id': 'avro-api-consumer',
+                'auto.offset.reset': 'earliest'
+            },
+            reader_value_schema=USER_SCHEMA
+        )
+        consumer.subscribe(['users'])
+        print("✓ Consumer subscribed to 'users' topic")
+        
+        consumer_running = True
+        while consumer_running:
+            try:
+                msg = consumer.poll(timeout=1.0)
+                if msg is None:
+                    continue
+                
+                if msg.error():
+                    print(f"Consumer error: {msg.error()}")
+                    continue
+                
+                message_buffer.append({
+                    'key': msg.key(),
+                    'value': msg.value(),
+                    'partition': msg.partition(),
+                    'offset': msg.offset(),
+                    'timestamp': msg.timestamp()
+                })
+                print(f"✓ Consumed message: {msg.value()}")
+            except Exception as e:
+                print(f"Error in consumer loop: {e}")
+                continue
+    except Exception as e:
+        print(f"✗ Consumer initialization failed: {e}")
+    finally:
+        if 'consumer' in locals():
+            consumer.close()
+        consumer_running = False
+
+# Start consumer in background thread
+consumer_thread = threading.Thread(target=consume_messages, daemon=True)
+consumer_thread.start()
+
+# ============ API ENDPOINTS ============
 
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    return jsonify({"status": "ok"}), 200
+    return jsonify({
+        'status': 'healthy',
+        'producer': 'connected' if producer else 'disconnected',
+        'consumer': 'running' if consumer_running else 'stopped'
+    }), 200
 
-@app.route('/api/users/encode/v1', methods=['POST'])
-def encode_v1():
-    """
-    Encode user data to Avro binary using schema v1
-    Expected JSON: {"id": 1, "nom": "Alice", "age": 25}
-    """
+@app.route('/messages/produce', methods=['POST'])
+def produce_message():
+    """Produce an Avro message to Kafka"""
     try:
         data = request.get_json()
         
         # Validate required fields
         if not all(k in data for k in ['id', 'nom', 'age']):
-            return jsonify({"error": "Missing required fields: id, nom, age"}), 400
+            return jsonify({
+                'error': 'Missing required fields: id, nom, age'
+            }), 400
         
-        # Encode to Avro binary
-        writer = DatumWriter(schema_v1)
-        bytes_io = io.BytesIO()
-        encoder = BinaryEncoder(bytes_io)
-        writer.write(data, encoder)
+        # Validate data types
+        if not isinstance(data['id'], int) or not isinstance(data['age'], int):
+            return jsonify({
+                'error': 'id and age must be integers'
+            }), 400
         
-        avro_bytes = bytes_io.getvalue()
+        if not isinstance(data['nom'], str):
+            return jsonify({
+                'error': 'nom must be a string'
+            }), 400
         
-        return jsonify({
-            "schema_version": "v1",
-            "avro_binary": avro_bytes.hex(),
-            "original_data": data
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route('/api/users/encode/v2', methods=['POST'])
-def encode_v2():
-    """
-    Encode user data to Avro binary using schema v2
-    Expected JSON: {"id": 1, "nom": "Alice", "age": 25, "email": "alice@example.com", "actif": true}
-    """
-    try:
-        data = request.get_json()
+        if producer is None:
+            return jsonify({
+                'error': 'Producer not initialized'
+            }), 503
         
-        # Validate required fields
-        if not all(k in data for k in ['id', 'nom', 'age']):
-            return jsonify({"error": "Missing required fields: id, nom, age"}), 400
-        
-        # Set defaults for optional fields
-        if 'email' not in data:
-            data['email'] = None
-        if 'actif' not in data:
-            data['actif'] = True
-        
-        # Encode to Avro binary
-        writer = DatumWriter(schema_v2)
-        bytes_io = io.BytesIO()
-        encoder = BinaryEncoder(bytes_io)
-        writer.write(data, encoder)
-        
-        avro_bytes = bytes_io.getvalue()
+        # Produce message
+        producer.produce(
+            topic='users',
+            value={
+                'id': data['id'],
+                'nom': data['nom'],
+                'age': data['age']
+            }
+        )
+        producer.flush()
         
         return jsonify({
-            "schema_version": "v2",
-            "avro_binary": avro_bytes.hex(),
-            "original_data": data
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route('/api/users/decode/v1', methods=['POST'])
-def decode_v1():
-    """
-    Decode Avro binary data using schema v1
-    Expected JSON: {"avro_binary": "hex_encoded_string"}
-    """
-    try:
-        data = request.get_json()
-        
-        if 'avro_binary' not in data:
-            return jsonify({"error": "Missing 'avro_binary' field"}), 400
-        
-        # Convert hex to bytes
-        avro_bytes = bytes.fromhex(data['avro_binary'])
-        
-        # Decode from Avro binary
-        reader = DatumReader(schema_v1)
-        bytes_io = io.BytesIO(avro_bytes)
-        decoder = BinaryDecoder(bytes_io)
-        decoded_data = reader.read(decoder)
-        
-        return jsonify({
-            "schema_version": "v1",
-            "decoded_data": decoded_data
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route('/api/users/decode/v2', methods=['POST'])
-def decode_v2():
-    """
-    Decode Avro binary data using schema v2
-    Expected JSON: {"avro_binary": "hex_encoded_string"}
-    """
-    try:
-        data = request.get_json()
-        
-        if 'avro_binary' not in data:
-            return jsonify({"error": "Missing 'avro_binary' field"}), 400
-        
-        # Convert hex to bytes
-        avro_bytes = bytes.fromhex(data['avro_binary'])
-        
-        # Decode from Avro binary
-        reader = DatumReader(schema_v2)
-        bytes_io = io.BytesIO(avro_bytes)
-        decoder = BinaryDecoder(bytes_io)
-        decoded_data = reader.read(decoder)
-        
-        return jsonify({
-            "schema_version": "v2",
-            "decoded_data": decoded_data
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route('/api/users/store', methods=['POST'])
-def store_user():
-    """
-    Store user in memory as Avro binary using schema v2
-    Expected JSON: {"id": 1, "nom": "Alice", "age": 25, "email": "alice@example.com", "actif": true}
-    """
-    try:
-        data = request.get_json()
-        
-        if not all(k in data for k in ['id', 'nom', 'age']):
-            return jsonify({"error": "Missing required fields: id, nom, age"}), 400
-        
-        user_id = data['id']
-        
-        # Set defaults
-        if 'email' not in data:
-            data['email'] = None
-        if 'actif' not in data:
-            data['actif'] = True
-        
-        # Encode to Avro
-        writer = DatumWriter(schema_v2)
-        bytes_io = io.BytesIO()
-        encoder = BinaryEncoder(bytes_io)
-        writer.write(data, encoder)
-        
-        users_db[user_id] = bytes_io.getvalue()
-        
-        return jsonify({
-            "message": f"User {user_id} stored successfully",
-            "user_data": data
+            'status': 'success',
+            'message': 'Message produced successfully',
+            'data': data
         }), 201
+    
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-@app.route('/api/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    """Retrieve stored user by ID"""
-    try:
-        if user_id not in users_db:
-            return jsonify({"error": f"User {user_id} not found"}), 404
-        
-        # Decode from Avro
-        avro_bytes = users_db[user_id]
-        reader = DatumReader(schema_v2)
-        bytes_io = io.BytesIO(avro_bytes)
-        decoder = BinaryDecoder(bytes_io)
-        decoded_data = reader.read(decoder)
-        
         return jsonify({
-            "user_id": user_id,
-            "data": decoded_data
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+            'error': f'Producer error: {str(e)}'
+        }), 500
 
-@app.route('/api/users', methods=['GET'])
-def list_users():
-    """List all stored users"""
+@app.route('/messages/consume', methods=['GET'])
+def get_messages():
+    """Get consumed messages from buffer"""
     try:
-        users_list = []
-        for user_id, avro_bytes in users_db.items():
-            reader = DatumReader(schema_v2)
-            bytes_io = io.BytesIO(avro_bytes)
-            decoder = BinaryDecoder(bytes_io)
-            decoded_data = reader.read(decoder)
-            users_list.append(decoded_data)
-        
+        messages = list(message_buffer)
         return jsonify({
-            "total": len(users_list),
-            "users": users_list
+            'status': 'success',
+            'count': len(messages),
+            'messages': messages
         }), 200
+    
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({
+            'error': f'Consumer error: {str(e)}'
+        }), 500
 
-@app.route('/api/users/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    """Delete a user by ID"""
+@app.route('/messages/clear', methods=['POST'])
+def clear_messages():
+    """Clear message buffer"""
     try:
-        if user_id not in users_db:
-            return jsonify({"error": f"User {user_id} not found"}), 404
-        
-        del users_db[user_id]
-        return jsonify({"message": f"User {user_id} deleted successfully"}), 200
+        message_buffer.clear()
+        return jsonify({
+            'status': 'success',
+            'message': 'Message buffer cleared'
+        }), 200
+    
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({
+            'error': f'Clear error: {str(e)}'
+        }), 500
 
-@app.route('/api/schema/v1', methods=['GET'])
-def get_schema_v1():
-    """Get schema v1"""
-    return jsonify(json.loads(schema_v1.to_json())), 200
+@app.route('/schema', methods=['GET'])
+def get_schema():
+    """Get the Avro schema"""
+    return jsonify({
+        'schema': json.loads(USER_SCHEMA_STR)
+    }), 200
 
-@app.route('/api/schema/v2', methods=['GET'])
-def get_schema_v2():
-    """Get schema v2"""
-    return jsonify(json.loads(schema_v2.to_json())), 200
+@app.route('/topics', methods=['GET'])
+def get_topics():
+    """Get information about Kafka topics"""
+    return jsonify({
+        'topics': ['users'],
+        'schema': 'User (id: long, nom: string, age: int)'
+    }), 200
+
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    """Get statistics"""
+    return jsonify({
+        'messages_in_buffer': len(message_buffer),
+        'buffer_capacity': message_buffer.maxlen,
+        'consumer_status': 'running' if consumer_running else 'stopped'
+    }), 200
+
+# ============ ERROR HANDLERS ============
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        'error': 'Endpoint not found'
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        'error': 'Internal server error'
+    }), 500
 
 if __name__ == '__main__':
-    print("Starting Avro REST API Server...")
+    print("\n" + "="*50)
+    print("Avro REST API Server Starting...")
+    print("="*50)
     print("Available endpoints:")
-    print("  GET  /health                      - Health check")
-    print("  POST /api/users/encode/v1         - Encode data with schema v1")
-    print("  POST /api/users/encode/v2         - Encode data with schema v2")
-    print("  POST /api/users/decode/v1         - Decode Avro binary with schema v1")
-    print("  POST /api/users/decode/v2         - Decode Avro binary with schema v2")
-    print("  POST /api/users/store             - Store user (Avro binary)")
-    print("  GET  /api/users                   - List all users")
-    print("  GET  /api/users/<id>              - Get user by ID")
-    print("  DELETE /api/users/<id>            - Delete user by ID")
-    print("  GET  /api/schema/v1               - Get schema v1")
-    print("  GET  /api/schema/v2               - Get schema v2")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("  GET  /health              - Health check")
+    print("  POST /messages/produce    - Produce message")
+    print("  GET  /messages/consume    - Get consumed messages")
+    print("  POST /messages/clear      - Clear message buffer")
+    print("  GET  /schema              - Get Avro schema")
+    print("  GET  /topics              - Get topics info")
+    print("  GET  /stats               - Get statistics")
+    print("="*50 + "\n")
+    
+    app.run(host='0.0.0.0', port=5000, debug=True)
