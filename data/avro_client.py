@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Simple Avro Client
-Fetches and decodes Avro data from server
+Simple Avro vs JSON Client (Size Comparison Only)
+Fetches and compares payload sizes of Avro vs JSON data
 """
 
 import urllib.request
 import json
 import fastavro
 import io
-import time
 from datetime import datetime
 
 # Avro Schema (must match server schema)
@@ -28,96 +27,46 @@ SCHEMA = {
 
 
 class AvroClient:
-    """Simple Avro client for fetching and decoding data"""
+    """Simple Avro/JSON client focused on payload size comparison"""
 
     def __init__(self, server_url="http://localhost:8000"):
         self.server_url = server_url
 
     def get_avro_single(self):
-        """Fetch and decode single Avro user"""
         url = f"{self.server_url}/avro/single"
-        start = time.time()
-        
         response = urllib.request.urlopen(url)
         data = response.read()
-        
         fo = io.BytesIO(data)
         user = fastavro.schemaless_reader(fo, SCHEMA)
-        
-        elapsed = (time.time() - start) * 1000  # Convert to ms
-        
-        return {
-            "user": user,
-            "size_bytes": len(data),
-            "time_ms": elapsed,
-            "format": "Avro"
-        }
+        return {"user": user, "size_bytes": len(data), "format": "Avro"}
 
     def get_avro_batch(self):
-        """Fetch and decode batch of Avro users"""
         url = f"{self.server_url}/avro/batch"
-        start = time.time()
-        
         response = urllib.request.urlopen(url)
         data = response.read()
-        
         fo = io.BytesIO(data)
         users = list(fastavro.reader(fo))
-        
-        elapsed = (time.time() - start) * 1000
-        
-        return {
-            "users": users,
-            "count": len(users),
-            "size_bytes": len(data),
-            "time_ms": elapsed,
-            "format": "Avro"
-        }
+        return {"users": users, "count": len(users), "size_bytes": len(data), "format": "Avro"}
 
     def get_json_single(self):
-        """Fetch and decode single JSON user"""
         url = f"{self.server_url}/json/single"
-        start = time.time()
-        
         response = urllib.request.urlopen(url)
         data = response.read()
         user = json.loads(data.decode())
-        
-        elapsed = (time.time() - start) * 1000
-        
-        return {
-            "user": user,
-            "size_bytes": len(data),
-            "time_ms": elapsed,
-            "format": "JSON"
-        }
+        return {"user": user, "size_bytes": len(data), "format": "JSON"}
 
     def get_json_batch(self):
-        """Fetch and decode batch of JSON users"""
         url = f"{self.server_url}/json/batch"
-        start = time.time()
-        
         response = urllib.request.urlopen(url)
         data = response.read()
         users = json.loads(data.decode())
-        
-        elapsed = (time.time() - start) * 1000
-        
-        return {
-            "users": users,
-            "count": len(users),
-            "size_bytes": len(data),
-            "time_ms": elapsed,
-            "format": "JSON"
-        }
+        return {"users": users, "count": len(users), "size_bytes": len(data), "format": "JSON"}
 
     def health_check(self):
-        """Check server health"""
         try:
-            url = f"{self.server_url}/health"
-            response = urllib.request.urlopen(url)
+            response = urllib.request.urlopen(f"{self.server_url}/health")
             data = json.loads(response.read().decode())
-            return data["status"] == "ok"
+            return data.get("status") == "ok"
         except:
             return False
 
@@ -133,92 +82,83 @@ def print_user(user):
 
 
 def main():
-    """Main client demo"""
     print("=" * 60)
-    print("  Simple Avro vs JSON Client")
+    print("  Avro vs JSON — Payload Size Comparison")
     print("=" * 60)
     print()
 
     client = AvroClient()
 
-    # Check server health
-    print("📍 Checking server health...")
+    print("Checking server health...")
     if not client.health_check():
-        print("❌ Server not responding!")
+        print("Server not responding!")
         print("   Start the server with: python avro_server.py")
         return
-
-    print("✓ Server is running!")
+    print("Server is running!")
     print()
 
     # Single record test
     print("=" * 60)
-    print("SINGLE RECORD TEST")
+    print("SINGLE RECORD SIZE COMPARISON")
     print("=" * 60)
     print()
 
-    print("📥 Fetching single Avro user...")
-    avro_result = client.get_avro_single()
-    print(f"✓ Received {avro_result['size_bytes']} bytes in {avro_result['time_ms']:.2f}ms")
-    print("  Data:")
-    print_user(avro_result["user"])
+    print("Fetching single Avro record...")
+    avro_single = client.get_avro_single()
+    print(f"Avro:  {avro_single['size_bytes']} bytes")
+    print_user(avro_single["user"])
     print()
 
-    print("📥 Fetching single JSON user...")
-    json_result = client.get_json_single()
-    print(f"✓ Received {json_result['size_bytes']} bytes in {json_result['time_ms']:.2f}ms")
-    print("  Data:")
-    print_user(json_result["user"])
+    print("Fetching single JSON record...")
+    json_single = client.get_json_single()
+    print(f"JSON:  {json_single['size_bytes']} bytes")
+    print_user(json_single["user"])
     print()
 
-    # Calculate difference
-    size_reduction = ((json_result['size_bytes'] - avro_result['size_bytes']) / json_result['size_bytes']) * 100
-    time_improvement = ((json_result['time_ms'] - avro_result['time_ms']) / json_result['time_ms']) * 100
-    
-    print("📊 SINGLE RECORD COMPARISON")
-    print(f"  Avro is {size_reduction:.1f}% smaller ({avro_result['size_bytes']} vs {json_result['size_bytes']} bytes)")
-    print(f"  Avro is {time_improvement:.1f}% faster ({avro_result['time_ms']:.2f}ms vs {json_result['time_ms']:.2f}ms)")
+    size_reduction_single = ((json_single['size_bytes'] - avro_single['size_bytes']) / json_single['size_bytes']) * 100
+
+    print("RESULT")
+    print(f"  Avro is {size_reduction_single:.1f}% smaller than JSON")
+    print(f"  ({avro_single['size_bytes']} bytes vs {json_single['size_bytes']} bytes)")
     print()
 
     # Batch test
     print("=" * 60)
-    print("BATCH RECORDS TEST (10 users)")
+    print("BATCH RECORDS SIZE COMPARISON (10 users)")
     print("=" * 60)
     print()
 
-    print("📥 Fetching batch Avro users...")
+    print("Fetching Avro batch...")
     avro_batch = client.get_avro_batch()
-    print(f"✓ Received {avro_batch['count']} users in {avro_batch['size_bytes']} bytes ({avro_batch['time_ms']:.2f}ms)")
+    print(f"Avro batch: {avro_batch['size_bytes']} bytes ({avro_batch['count']} users)")
     print(f"  First user: {avro_batch['users'][0]['name']}")
     print()
 
-    print("📥 Fetching batch JSON users...")
+    print("Fetching JSON batch...")
     json_batch = client.get_json_batch()
-    print(f"✓ Received {json_batch['count']} users in {json_batch['size_bytes']} bytes ({json_batch['time_ms']:.2f}ms)")
+    print(f"JSON batch: {json_batch['size_bytes']} bytes ({json_batch['count']} users)")
     print(f"  First user: {json_batch['users'][0]['name']}")
     print()
 
-    # Calculate batch differences
-    batch_size_reduction = ((json_batch['size_bytes'] - avro_batch['size_bytes']) / json_batch['size_bytes']) * 100
-    batch_time_improvement = ((json_batch['time_ms'] - avro_batch['time_ms']) / json_batch['time_ms']) * 100
+    size_reduction_batch = ((json_batch['size_bytes'] - avro_batch['size_bytes']) / json_batch['size_bytes']) * 100
 
-    print("📊 BATCH RECORDS COMPARISON (10 users)")
-    print(f"  Avro is {batch_size_reduction:.1f}% smaller ({avro_batch['size_bytes']} vs {json_batch['size_bytes']} bytes)")
-    print(f"  Avro is {batch_time_improvement:.1f}% faster ({avro_batch['time_ms']:.2f}ms vs {json_batch['time_ms']:.2f}ms)")
+    print("RESULT")
+    print(f"  Avro is {size_reduction_batch:.1f}% smaller than JSON for batch data")
+    print(f"  ({avro_batch['size_bytes']} bytes vs {json_batch['size_bytes']} bytes)")
     print()
 
-    # Overall stats
+    # Summary table
     print("=" * 60)
-    print("SUMMARY")
+    print("SUMMARY — PAYLOAD SIZES")
     print("=" * 60)
     print()
     print("Format  | Single Record | Batch (10 users)")
     print("--------|---------------|------------------")
-    print(f"Avro    | {avro_result['size_bytes']:6d} bytes  | {avro_batch['size_bytes']:6d} bytes")
-    print(f"JSON    | {json_result['size_bytes']:6d} bytes  | {json_batch['size_bytes']:6d} bytes")
+    print(f"Avro    | {avro_single['size_bytes']:6d} bytes     | {avro_batch['size_bytes']:7d} bytes")
+    print(f"JSON    | {json_single['size_bytes']:6d} bytes     | {json_batch['size_bytes']:7d} bytes")
     print()
-    print(f"🎯 Avro advantage: {size_reduction:.0f}% smaller for single records")
-    print(f"🎯 Avro advantage: {batch_size_reduction:.0f}% smaller for batch records")
+    print(f"Avro saves ~{size_reduction_single:.0f}% on single records")
+    print(f"Avro saves ~{size_reduction_batch:.0f}% on batch transfers")
     print()
 
 
