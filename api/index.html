@@ -663,7 +663,6 @@
                     const decoder = new TextDecoder();
                     this.jsonMetrics.startTime = performance.now();
 
-                    let totalTime = 0;
                     let lastSampleData = null;
 
                     while (true) {
@@ -679,9 +678,12 @@
                             this.jsonMetrics.recordCount++;
                             this.jsonMetrics.totalSize += data.size_bytes;
                             this.jsonMetrics.processingTime.push(data.processing_time_ms);
-                            totalTime += data.processing_time_ms;
                             lastSampleData = data;
-                            this.updateJSONUI(totalTime);
+                            
+                            // Calculate elapsed time from start
+                            const currentTime = performance.now();
+                            const elapsedTime = currentTime - this.jsonMetrics.startTime;
+                            this.updateJSONUI(elapsedTime);
 
                             if (lastSampleData) {
                                 document.getElementById('json-sample').textContent = 
@@ -702,7 +704,6 @@
                     const decoder = new TextDecoder();
                     this.avroMetrics.startTime = performance.now();
 
-                    let totalTime = 0;
                     let lastSampleData = null;
 
                     while (true) {
@@ -718,9 +719,12 @@
                             this.avroMetrics.recordCount++;
                             this.avroMetrics.totalSize += data.size_bytes;
                             this.avroMetrics.processingTime.push(data.processing_time_ms);
-                            totalTime += data.processing_time_ms;
                             lastSampleData = data;
-                            this.updateAvroUI(totalTime);
+                            
+                            // Calculate elapsed time from start
+                            const currentTime = performance.now();
+                            const elapsedTime = currentTime - this.avroMetrics.startTime;
+                            this.updateAvroUI(elapsedTime);
 
                             if (lastSampleData) {
                                 document.getElementById('avro-sample').textContent = 
